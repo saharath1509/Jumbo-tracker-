@@ -241,32 +241,15 @@
 <div id="printArea"></div>
 
 <script>
-/* ==================================================================
-   ตั้งค่าฐานข้อมูล Firebase (แก้ค่าด้านล่างนี้เป็นของโปรเจกต์คุณเอง)
-   วิธีขอค่านี้: ดูขั้นตอนในคู่มือการใช้งานที่แนบมาพร้อมไฟล์นี้
-   ================================================================== */
 const firebaseConfig = {
- // Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
-
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyA4vveh-fX1Y6uyD_poX2ckUuaAVwl52e0",
-  authDomain: "jumbo-qr-tracker.firebaseapp.com",
-  projectId: "jumbo-qr-tracker",
-  storageBucket: "jumbo-qr-tracker.firebasestorage.app",
-  messagingSenderId: "70468127240",
-  appId: "1:70468127240:web:583d250904b4957ef45fbd",
-  measurementId: "G-V0GLFWZ28L"
+  apiKey: "AIzaSyCRBUgfZzh53ST_HGfoLDblJtdGmDfIV_s",
+  authDomain: "jumbo-qr-tracker-datafirebase.firebaseapp.com",
+  projectId: "jumbo-qr-tracker-datafirebase",
+  storageBucket: "jumbo-qr-tracker-datafirebase.firebasestorage.app",
+  messagingSenderId: "730251543567",
+  appId: "1:730251543567:web:76e215e44c03bd04ca4f7a",
+  measurementId: "G-1YR92HZ87J"
 };
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
 
 const NOT_CONFIGURED = !firebaseConfig.apiKey || firebaseConfig.apiKey.indexOf('YOUR_') === 0;
 
