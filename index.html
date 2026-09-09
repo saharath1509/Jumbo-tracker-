@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ป้ายระบุและควบคุมการใช้จัมโบ้</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Thai:wght@500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<style>
+  :root{
+    --paper:#F1ECDF;
+    --paper-2:#E7DFC7;
+    --card:#FAF7EE;
+    --ink:#23291F;
+    --ink-soft:#5B5B4C;
+    --green:#2F5233;
+    --green-deep:#213B26;
+    --green-light:#4C7A52;
+    --amber:#B8873A;
+    --red:#A8402F;
+    --line:#C9C0A0;
+    --line-soft:#DAD2B6;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Noto Sans Thai',sans-serif;
+    min-height:100vh;
+    background-image:
+      linear-gradient(var(--line-soft) 1px, transparent 1px);
+    background-size: 100% 42px;
+    background-attachment:local;
+  }
+  h1,h2,h3{font-family:'Noto Serif Thai',serif; margin:0;}
+  button{font-family:inherit;}
+  .app{max-width:920px;margin:0 auto;padding:0 0 60px;}
+
+  /* Header */
+  .topbar{
+    background:var(--green-deep);
+    color:var(--paper);
+    padding:22px 20px 18px;
+    border-bottom:4px solid var(--green);
+    position:relative;
+  }
+  .topbar .brand{display:flex;align-items:center;gap:12px;}
+  .brand-mark{
+    width:34px;height:34px;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, var(--green-light), var(--green) 70%);
+    border:2px solid var(--paper);
+    flex-shrink:0;
+  }
+  .topbar h1{font-size:19px;font-weight:600;letter-spacing:.2px;}
+  .topbar .sub{font-size:12.5px;color:#CFE0CE;margin-top:3px;font-family:'Noto Sans Thai';}
+
+  /* Tabs styled like ledger index tabs */
+  .tabs{
+    display:flex;gap:4px;
+    padding:0 16px;background:var(--green-deep);
+    overflow-x:auto;
+  }
+  .tab{
+    background:var(--paper-2);
+    color:var(--ink-soft);
+    border:none;
+    padding:10px 16px 9px;
+    font-size:13.5px;
+    font-weight:600;
+    font-family:'Noto Sans Thai';
+    border-radius:8px 8px 0 0;
+    cursor:pointer;
+    white-space:nowrap;
+    transform:translateY(4px);
+    transition:transform .12s, background .12s, color .12s;
+  }
+  .tab.active{
+    background:var(--card);
+    color:var(--green-deep);
+    transform:translateY(0);
+  }
+
+  .panel{padding:22px 18px 10px;}
+  .section-title{font-size:15px;color:var(--ink-soft);margin-bottom:14px;display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;}
+  .section-title strong{color:var(--ink);font-family:'Noto Serif Thai';font-size:19px;font-weight:600;}
+
+  /* Jumbo card grid */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:16px;}
+  .tag-card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:4px;
+    position:relative;
+    padding:16px 14px 14px;
+    cursor:pointer;
+    transition:box-shadow .15s, transform .15s;
+    box-shadow:0 1px 0 var(--line-soft);
+  }
+  .tag-card:hover{transform:translateY(-2px);box-shadow:0 6px 14px rgba(35,41,31,.12);}
+  .tag-card .holes{position:absolute;top:8px;right:10px;display:flex;gap:5px;}
+  .tag-card .hole{width:9px;height:9px;border-radius:50%;background:var(--paper);border:1px solid var(--line);}
+  .tag-card .jno{font-family:'Noto Serif Thai';font-size:13px;color:var(--green);font-weight:600;letter-spacing:.5px;}
+  .tag-card .code{font-size:22px;font-weight:700;font-family:'Noto Serif Thai';margin-top:2px;color:var(--ink);}
+  .tag-card .name{font-size:13px;color:var(--ink-soft);margin-top:2px;min-height:34px;line-height:1.35;}
+  .tag-card .qr-thumb{width:56px;height:56px;margin-top:10px;border:1px solid var(--line-soft);background:#fff;padding:4px;}
+  .tag-card .qr-thumb img{width:100%;height:100%;display:block;}
+  .meter-row{margin-top:10px;}
+  .meter-label{display:flex;justify-content:space-between;font-size:11.5px;color:var(--ink-soft);margin-bottom:4px;}
+  .meter{height:6px;background:var(--paper-2);border-radius:3px;overflow:hidden;}
+  .meter > span{display:block;height:100%;background:var(--green-light);}
+  .meter.warn > span{background:var(--amber);}
+  .meter.full > span{background:var(--red);}
+  .status-pill{display:inline-block;margin-top:9px;font-size:11px;font-weight:600;padding:3px 9px;border-radius:10px;}
+  .status-ok{background:#E4EEE0;color:var(--green-deep);}
+  .status-warn{background:#F3E6CE;color:#7A5A1E;}
+  .status-full{background:#F3DAD5;color:var(--red);}
+
+  /* Detail view */
+  .backlink{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--green-deep);background:none;border:none;cursor:pointer;padding:0;margin-bottom:14px;font-weight:600;}
+  .detail-head{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);padding:18px;border-radius:4px;}
+  .detail-qr{background:#fff;border:1px solid var(--line-soft);padding:8px;flex-shrink:0;}
+  .detail-qr img{display:block;width:120px;height:120px;}
+  .detail-info .jno{font-family:'Noto Serif Thai';color:var(--green);font-size:14px;font-weight:600;}
+  .detail-info .code{font-size:28px;font-weight:700;font-family:'Noto Serif Thai';margin:2px 0 3px;}
+  .detail-info .name{color:var(--ink-soft);font-size:14.5px;}
+  .detail-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;}
+  .btn{
+    border:1px solid var(--green-deep);
+    background:var(--green-deep);
+    color:var(--paper);
+    padding:8px 14px;
+    border-radius:4px;
+    font-size:13px;
+    font-weight:600;
+    cursor:pointer;
+    font-family:'Noto Sans Thai';
+  }
+  .btn.ghost{background:transparent;color:var(--green-deep);}
+  .btn.small{padding:5px 10px;font-size:12px;}
+  .btn:disabled{opacity:.45;cursor:not-allowed;}
+
+  table.ledger{width:100%;border-collapse:collapse;margin-top:18px;font-size:12.8px;background:var(--card);}
+  table.ledger th,table.ledger td{border:1px solid var(--line);padding:6px 6px;text-align:center;}
+  table.ledger th{background:var(--paper-2);color:var(--ink-soft);font-weight:600;font-size:11.8px;}
+  table.ledger td.rownum{color:var(--ink-soft);width:26px;}
+  table.ledger td.note{text-align:left;font-size:11.8px;color:var(--ink-soft);}
+  .tick{color:var(--green);font-weight:700;}
+  .dash{color:var(--line);}
+
+  .form-box{background:var(--card);border:1px solid var(--line);border-radius:4px;padding:16px;margin-top:18px;}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;}
+  .form-grid .full{grid-column:1/-1;}
+  label{display:block;font-size:12px;color:var(--ink-soft);margin-bottom:4px;font-weight:600;}
+  input[type=text],input[type=date]{
+    width:100%;padding:8px 9px;border:1px solid var(--line);border-radius:3px;
+    background:#fff;font-family:'Noto Sans Thai';font-size:13.5px;color:var(--ink);
+  }
+  .check-row{display:flex;align-items:center;gap:8px;padding:8px 0;}
+  .check-row input{width:16px;height:16px;}
+  .limit-note{font-size:12.5px;color:var(--red);font-weight:600;margin-top:10px;}
+
+  /* Scan */
+  .scan-wrap{display:flex;flex-direction:column;align-items:center;gap:14px;}
+  .viewfinder{
+    width:260px;height:260px;position:relative;
+    background:#111;border-radius:4px;overflow:hidden;
+    border:2px solid var(--green-deep);
+  }
+  .viewfinder video{width:100%;height:100%;object-fit:cover;}
+  .corner{position:absolute;width:22px;height:22px;border-color:var(--amber);}
+  .corner.tl{top:8px;left:8px;border-top:3px solid var(--amber);border-left:3px solid var(--amber);}
+  .corner.tr{top:8px;right:8px;border-top:3px solid var(--amber);border-right:3px solid var(--amber);}
+  .corner.bl{bottom:8px;left:8px;border-bottom:3px solid var(--amber);border-left:3px solid var(--amber);}
+  .corner.br{bottom:8px;right:8px;border-bottom:3px solid var(--amber);border-right:3px solid var(--amber);}
+  .scan-msg{font-size:13px;color:var(--ink-soft);text-align:center;max-width:320px;}
+  .manual-scan{background:var(--card);border:1px solid var(--line);padding:14px;border-radius:4px;width:100%;max-width:340px;}
+
+  .toast{
+    position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+    background:var(--green-deep);color:var(--paper);padding:10px 18px;border-radius:5px;
+    font-size:13.5px;font-weight:600;box-shadow:0 6px 18px rgba(0,0,0,.25);
+    opacity:0;pointer-events:none;transition:opacity .25s, transform .25s;
+    z-index:50;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(-4px);}
+
+  .export-box{background:var(--card);border:1px solid var(--line);border-radius:4px;padding:20px;}
+  .export-box p{font-size:13.5px;color:var(--ink-soft);line-height:1.6;}
+  .summary-table{width:100%;border-collapse:collapse;margin-top:14px;font-size:12.8px;}
+  .summary-table th,.summary-table td{border:1px solid var(--line);padding:6px 8px;text-align:left;}
+  .summary-table th{background:var(--paper-2);}
+
+  .conn-ok{color:#B9D6B6 !important;}
+  .conn-bad{color:#F0BDB2 !important;}
+
+  .setup-screen{max-width:640px;margin:30px auto;background:var(--card);border:1px solid var(--line);border-radius:6px;padding:24px;}
+  .setup-screen h2{font-size:18px;margin-bottom:10px;}
+  .setup-screen ol{padding-left:20px;font-size:13.5px;line-height:1.9;color:var(--ink);}
+  .setup-screen code{background:var(--paper-2);padding:1px 6px;border-radius:3px;font-size:12.5px;}
+  .setup-screen .warn-box{background:#F3DAD5;color:var(--red);padding:10px 12px;border-radius:4px;font-size:12.5px;margin-top:14px;}
+
+  /* print */
+  #printArea{display:none;}
+  @media print{
+    body *{visibility:hidden;background:#fff !important;}
+    #printArea, #printArea *{visibility:visible;}
+    #printArea{display:block;position:absolute;top:0;left:0;width:100%;}
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-mark"></div>
+      <div>
+        <h1>ป้ายระบุและควบคุมการใช้จัมโบ้</h1>
+        <div class="sub">ระบบติดตามการใช้งานจัมโบ้ด้วย QR Code &nbsp;·&nbsp; จำกัดการใช้งานไม่เกิน 20 ครั้งต่อจัมโบ้</div>
+        <div class="sub" id="connStatus" style="margin-top:4px;">กำลังเชื่อมต่อฐานข้อมูล...</div>
+      </div>
+    </div>
+  </div>
+  <div class="tabs" id="tabs">
+    <button class="tab" data-tab="list">รายการจัมโบ้</button>
+    <button class="tab" data-tab="scan">สแกน QR</button>
+    <button class="tab" data-tab="export">ส่งออกข้อมูล</button>
+  </div>
+
+  <div class="panel" id="panel"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div id="printArea"></div>
+
+<script>
+/* ==================================================================
+   ตั้งค่าฐานข้อมูล Firebase (แก้ค่าด้านล่างนี้เป็นของโปรเจกต์คุณเอง)
+   วิธีขอค่านี้: ดูขั้นตอนในคู่มือการใช้งานที่แนบมาพร้อมไฟล์นี้
+   ================================================================== */
+const firebaseConfig = {
+ // Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyA4vveh-fX1Y6uyD_poX2ckUuaAVwl52e0",
+  authDomain: "jumbo-qr-tracker.firebaseapp.com",
+  projectId: "jumbo-qr-tracker",
+  storageBucket: "jumbo-qr-tracker.firebasestorage.app",
+  messagingSenderId: "70468127240",
+  appId: "1:70468127240:web:583d250904b4957ef45fbd",
+  measurementId: "G-V0GLFWZ28L"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+
+const NOT_CONFIGURED = !firebaseConfig.apiKey || firebaseConfig.apiKey.indexOf('YOUR_') === 0;
+
+let db = null;
+let dbReady = false;
+
+async function initApp(){
+  if(NOT_CONFIGURED){
+    showSetupScreen();
+    return;
+  }
+  try{
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+    await firebase.auth().signInAnonymously();
+    dbReady = true;
+    setConnStatus('เชื่อมต่อฐานข้อมูลสำเร็จ · ข้อมูลซิงค์แบบเรียลไทม์', true);
+    goTo('list');
+  }catch(err){
+    console.error(err);
+    setConnStatus('เชื่อมต่อฐานข้อมูลไม่สำเร็จ: ' + (err && err.message ? err.message : err), false);
+    showSetupScreen();
+  }
+}
+
+function setConnStatus(text, ok){
+  const el = document.getElementById('connStatus');
+  if(!el) return;
+  el.textContent = text;
+  el.classList.remove('conn-ok','conn-bad');
+  el.classList.add(ok ? 'conn-ok' : 'conn-bad');
+}
+
+function showSetupScreen(){
+  setConnStatus('ยังไม่ได้ตั้งค่าฐานข้อมูล', false);
+  document.querySelectorAll('.tab').forEach(b=>b.style.display='none');
+  const panel = document.getElementById('panel');
+  panel.innerHTML = `
+    <div class="setup-screen">
+      <h2>ยังไม่ได้เชื่อมต่อฐานข้อมูล</h2>
+      <p style="font-size:13.5px;color:var(--ink-soft);">แอปนี้ใช้ Firebase Firestore (ฟรี) เป็นฐานข้อมูลกลาง เพื่อให้ทุกคนที่เปิดไฟล์นี้ ไม่ว่าจากเครื่องหรือที่ไหน เห็นข้อมูลจัมโบ้ชุดเดียวกันแบบเรียลไทม์ (ไม่มีดีเลย์) ต้องตั้งค่าครั้งเดียวก่อนใช้งานจริง (ดูขั้นตอนละเอียดในคู่มือการใช้งานที่แนบมาด้วย) สรุปคร่าวๆ:</p>
+      <ol>
+        <li>สร้างโปรเจกต์ฟรีที่ <code>console.firebase.google.com</code></li>
+        <li>เมนู Build → <b>Firestore Database</b> → สร้างฐานข้อมูล (โหมด Production)</li>
+        <li>เมนู Build → <b>Authentication</b> → Sign-in method → เปิดใช้งาน <b>Anonymous</b></li>
+        <li>ไอคอนเฟือง → Project settings → เลื่อนลงหา "Your apps" → กด <code>&lt;/&gt;</code> เพื่อลงทะเบียนเว็บแอป → คัดลอกค่า <code>firebaseConfig</code></li>
+        <li>เปิดไฟล์ HTML นี้ด้วยโปรแกรมแก้ไขข้อความ แล้วนำค่าที่คัดลอกมาแทนที่ตัวแปร <code>firebaseConfig</code> ที่ต้นไฟล์สคริปต์</li>
+        <li>ไปที่ Firestore → แท็บ Rules แล้ววางกฎนี้ก่อนกด Publish:
+          <br><code>allow read, write: if request.auth != null;</code></li>
+        <li>บันทึกไฟล์แล้วอัปโหลดขึ้นเว็บโฮสต์/อินทราเน็ต/GitHub Pages (ต้องเป็น HTTPS หากต้องการใช้กล้องสแกน QR)</li>
+      </ol>
+      <div class="warn-box">ค่า firebaseConfig ไม่ใช่ความลับ แต่ข้อมูลจะปลอดภัยจาก Rules ที่ตั้งไว้เท่านั้น — อย่าใช้กฎ <code>allow read, write: if true;</code> แบบเปิดสาธารณะ เพราะใครก็เขียนข้อมูลได้</div>
+    </div>`;
+}
+
+/* ---------------- Data model ---------------- */
+const TYPE_OPTIONS = ['ข้าวไทย', 'ข้าวญี่ปุ่น'];
+const TYPE_ABBR = { 'ข้าวไทย': 'TH', 'ข้าวญี่ปุ่น': 'JP' };
+const MAX_USES = 20;
+
+function genId(){
+  return 'JB-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2,5).toUpperCase();
+}
+
+/* ---------------- Firestore helpers: jumbo list ---------------- */
+async function fetchJumbosOnce(){
+  const snap = await db.collection('jumbos').get();
+  const list = [];
+  snap.forEach(doc=> list.push(Object.assign({id: doc.id}, doc.data())));
+  // seed on very first run
+  if(list.length===0){
+    const seed = [
+      { id: genId(), jno: 1, type: 'ข้าวไทย' },
+      { id: genId(), jno: 1, type: 'ข้าวญี่ปุ่น' }
+    ];
+    for(const j of seed){
+      await db.collection('jumbos').doc(j.id).set({ jno:j.jno, type:j.type, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+      await db.collection('usage').doc(j.id).set({ entries: [] });
+    }
+    return seed;
+  }
+  return list;
+}
+
+function subscribeJumbos(cb){
+  return db.collection('jumbos').onSnapshot(snap=>{
+    const list = [];
+    snap.forEach(doc=> list.push(Object.assign({id: doc.id}, doc.data())));
+    cb(list);
+  }, err=>{ console.error(err); toast('การเชื่อมต่อฐานข้อมูลมีปัญหา: ' + err.message); });
+}
+
+function subscribeAllUsageCounts(cb){
+  return db.collection('usage').onSnapshot(snap=>{
+    const map = {};
+    snap.forEach(doc=> map[doc.id] = (doc.data().entries || []));
+    cb(map);
+  }, err=>{ console.error(err); });
+}
+
+function subscribeUsage(jumboId, cb){
+  return db.collection('usage').doc(jumboId).onSnapshot(doc=>{
+    cb(doc.exists ? (doc.data().entries || []) : []);
+  }, err=>{ console.error(err); toast('การเชื่อมต่อฐานข้อมูลมีปัญหา: ' + err.message); });
+}
+
+async function addJumbo(type){
+  const snap = await db.collection('jumbos').where('type','==',type).get();
+  let maxJno = 0;
+  snap.forEach(doc=>{ if(doc.data().jno > maxJno) maxJno = doc.data().jno; });
+  const newJumbo = { id: genId(), jno: maxJno+1, type };
+  await db.collection('jumbos').doc(newJumbo.id).set({ jno:newJumbo.jno, type:newJumbo.type, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+  await db.collection('usage').doc(newJumbo.id).set({ entries: [] });
+  return newJumbo;
+}
+
+async function deleteJumbo(id){
+  await db.collection('jumbos').doc(id).delete();
+  await db.collection('usage').doc(id).delete();
+}
+
+async function loadLog(jumboId){
+  const doc = await db.collection('usage').doc(jumboId).get();
+  return doc.exists ? (doc.data().entries || []) : [];
+}
+
+async function addLogEntry(jumboId, entry){
+  const ref = db.collection('usage').doc(jumboId);
+  const doc = await ref.get();
+  const current = doc.exists ? (doc.data().entries || []) : [];
+  if(current.length >= MAX_USES) return false;
+  current.push(entry);
+  await ref.set({ entries: current });
+  return true;
+}
+
+/* ---------------- Toast ---------------- */
+let toastTimer;
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.classList.remove('show'), 2600);
+}
+
+/* ---------------- Router ---------------- */
+let currentTab = 'list';
+let currentJumbo = null;
+let jumbosCache = [];
+let activeUnsubs = [];
+
+function clearListeners(){
+  activeUnsubs.forEach(fn=>{ try{ fn(); }catch(e){} });
+  activeUnsubs = [];
+}
+
+document.getElementById('tabs').addEventListener('click', e=>{
+  const btn = e.target.closest('.tab');
+  if(!btn) return;
+  currentJumbo = null;
+  goTo(btn.dataset.tab);
+});
+
+async function goTo(tab){
+  if(!dbReady) return;
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+  stopScanner();
+  clearListeners();
+  if(tab==='list') renderList();
+  else if(tab==='scan') renderScan();
+  else if(tab==='export') renderExport();
+}
+
+/* ---------------- QR helpers ---------------- */
+function makeQrDataUrl(text, size){
+  return new Promise(resolve=>{
+    const holder = document.createElement('div');
+    holder.style.display='none';
+    document.body.appendChild(holder);
+    new QRCode(holder, {text, width:size, height:size, correctLevel: QRCode.CorrectLevel.M});
+    setTimeout(()=>{
+      const img = holder.querySelector('img');
+      const canvas = holder.querySelector('canvas');
+      let url = '';
+      if(canvas) url = canvas.toDataURL('image/png');
+      else if(img) url = img.src;
+      document.body.removeChild(holder);
+      resolve(url);
+    }, 60);
+  });
+}
+
+/* ---------------- List view (realtime) ---------------- */
+async function renderList(){
+  const panel = document.getElementById('panel');
+  panel.innerHTML = `<div class="section-title"><strong>รายการจัมโบ้ทั้งหมด</strong><span id="jCount">กำลังโหลด...</span></div>
+  <div style="margin-bottom:16px;">
+    <button class="btn small" id="addJumboBtn">+ เพิ่มจัมโบ้ใหม่</button>
+  </div>
+  <div id="addForm" style="display:none;" class="form-box">
+    <div class="form-grid">
+      <div>
+        <label>ชนิดข้าว</label>
+        <select id="newType" style="width:100%;padding:8px 9px;border:1px solid var(--line);border-radius:3px;font-family:'Noto Sans Thai';font-size:13.5px;">
+          ${TYPE_OPTIONS.map(t=>`<option value="${t}">${t}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="detail-actions">
+      <button class="btn small" id="confirmAdd">บันทึกจัมโบ้ใหม่</button>
+      <button class="btn small ghost" id="cancelAdd">ยกเลิก</button>
+    </div>
+  </div>
+  <div class="grid" id="grid">กำลังโหลด...</div>`;
+
+  document.getElementById('addJumboBtn').addEventListener('click', ()=>{
+    document.getElementById('addForm').style.display='block';
+  });
+  document.getElementById('cancelAdd').addEventListener('click', ()=>{
+    document.getElementById('addForm').style.display='none';
+  });
+  document.getElementById('confirmAdd').addEventListener('click', async ()=>{
+    const type = document.getElementById('newType').value;
+    try{
+      const created = await addJumbo(type);
+      toast(`เพิ่มจัมโบ้ No.${created.jno} (${type}) เรียบร้อย`);
+      document.getElementById('addForm').style.display='none';
+    }catch(err){ toast('เพิ่มจัมโบ้ไม่สำเร็จ: ' + err.message); }
+  });
+
+  let latestJumbos = [];
+  let latestUsage = {};
+
+  const redraw = async ()=>{
+    jumbosCache = latestJumbos;
+    document.getElementById('jCount').textContent = `${latestJumbos.length} รายการ`;
+    const grid = document.getElementById('grid');
+    if(!grid) return;
+    if(latestJumbos.length===0){
+      grid.innerHTML = '<div style="color:var(--ink-soft);font-size:13.5px;">ยังไม่มีจัมโบ้ในระบบ กด "+ เพิ่มจัมโบ้ใหม่" เพื่อเริ่มต้น</div>';
+      return;
+    }
+    grid.innerHTML = '';
+    for(const j of latestJumbos){
+      const log = latestUsage[j.id] || [];
+      const used = log.length;
+      const pct = Math.min(100, Math.round(used/MAX_USES*100));
+      const qrUrl = await makeQrDataUrl(j.id, 90);
+      let statusClass='ok', statusText='ใช้งานปกติ', meterClass='';
+      if(used>=MAX_USES){ statusClass='full'; statusText='ครบกำหนดการใช้งาน'; meterClass='full'; }
+      else if(used>=MAX_USES-3){ statusClass='warn'; statusText='ใกล้ครบกำหนด'; meterClass='warn'; }
+
+      const card = document.createElement('div');
+      card.className='tag-card';
+      card.innerHTML = `
+        <div class="holes"><span class="hole"></span><span class="hole"></span></div>
+        <div class="jno">Jumbo No. ${j.jno}</div>
+        <div class="code">${TYPE_ABBR[j.type] || '?'}</div>
+        <div class="name">${j.type}</div>
+        <div class="qr-thumb"><img src="${qrUrl}" alt="QR ${j.id}"></div>
+        <div class="meter-row">
+          <div class="meter-label"><span>ใช้งานแล้ว</span><span>${used}/${MAX_USES}</span></div>
+          <div class="meter ${meterClass}"><span style="width:${pct}%"></span></div>
+        </div>
+        <span class="status-pill status-${statusClass}">${statusText}</span>
+      `;
+      card.addEventListener('click', ()=>{ currentJumbo=j.id; renderDetail(j.id); });
+      grid.appendChild(card);
+    }
+  };
+
+  const unsubJ = subscribeJumbos(list=>{ latestJumbos = list.sort((a,b)=> a.type===b.type ? a.jno-b.jno : a.type.localeCompare(b.type)); redraw(); });
+  const unsubU = subscribeAllUsageCounts(map=>{ latestUsage = map; redraw(); });
+  activeUnsubs.push(unsubJ, unsubU);
+}
+
+/* ---------------- Detail view (realtime usage log) ---------------- */
+async function renderDetail(jumboId){
+  clearListeners();
+  const doc = await db.collection('jumbos').doc(jumboId).get();
+  if(!doc.exists){ toast('ไม่พบจัมโบ้นี้ในระบบ'); goTo('list'); return; }
+  const j = Object.assign({id: doc.id}, doc.data());
+
+  const panel = document.getElementById('panel');
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+  panel.innerHTML = `<button class="backlink" id="backBtn">‹ กลับไปรายการจัมโบ้</button>
+  <div id="detailBody">กำลังโหลด...</div>`;
+  document.getElementById('backBtn').addEventListener('click', ()=>{ currentJumbo=null; goTo('list'); });
+
+  const qrUrl = await makeQrDataUrl(j.id, 220);
+
+  const redraw = (log)=>{
+    // ผู้ใช้กำลังกรอกฟอร์มบันทึกการใช้งานอยู่ -> ข้ามการวาดหน้าจอทับรอบนี้ ไม่รบกวนการพิมพ์
+    const active = document.activeElement;
+    if(active && active.closest && active.closest('#entryForm')) return;
+
+    const used = log.length;
+    const limitReached = used>=MAX_USES;
+    let rows = '';
+    for(let i=0;i<MAX_USES;i++){
+      const e = log[i];
+      rows += `<tr>
+        <td class="rownum">${i+1}</td>
+        <td>${e?e.date:'<span class="dash">—</span>'}</td>
+        <td>${e? (e.clean?'<span class="tick">✓</span>':'<span class="dash">—</span>') : '<span class="dash">—</span>'}</td>
+        <td>${e? (e.complete?'<span class="tick">✓</span>':'<span class="dash">—</span>') : '<span class="dash">—</span>'}</td>
+        <td>${e?e.recorder:'<span class="dash">—</span>'}</td>
+        <td>${e?e.inspector:'<span class="dash">—</span>'}</td>
+        <td class="note">${e&&e.note?e.note:''}</td>
+      </tr>`;
+    }
+
+    const body = document.getElementById('detailBody');
+    if(!body) return;
+    body.innerHTML = `
+      <div class="detail-head">
+        <div class="detail-qr"><img src="${qrUrl}" width="120" height="120" alt="QR ${j.id}"></div>
+        <div class="detail-info">
+          <div class="jno">Jumbo No. ${j.jno} &nbsp;·&nbsp; รหัส ${j.id}</div>
+          <div class="code">${TYPE_ABBR[j.type] || '?'}</div>
+          <div class="name">ชนิดข้าว: ${j.type}</div>
+          <div class="detail-actions">
+            <button class="btn small" id="dlQr">ดาวน์โหลด QR</button>
+            <button class="btn small ghost" id="printLabel">พิมพ์ใบปะหน้า Summary</button>
+            <button class="btn small ghost" id="deleteJumbo" style="border-color:var(--red);color:var(--red);">ลบจัมโบ้นี้</button>
+          </div>
+        </div>
+      </div>
+
+      <table class="ledger">
+        <thead><tr>
+          <th style="width:30px">ครั้งที่</th>
+          <th>วันที่ใช้งาน</th>
+          <th>ความสะอาด</th>
+          <th>ความสมบูรณ์<br>ของจัมโบ้</th>
+          <th>ผู้บันทึก</th>
+          <th>ผู้ตรวจสอบ</th>
+          <th>หมายเหตุ</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+
+      <div class="form-box">
+        <h3 style="font-size:15px;margin-bottom:12px;">บันทึกการใช้งานครั้งที่ ${used+1}</h3>
+        ${limitReached ? `<div class="limit-note">จัมโบ้นี้ใช้งานครบ ${MAX_USES} ครั้งแล้ว กรุณาเปลี่ยนจัมโบ้ใหม่ ไม่สามารถบันทึกเพิ่มได้</div>` : `
+        <form id="entryForm">
+          <div class="form-grid">
+            <div>
+              <label>วันที่ใช้งาน</label>
+              <input type="date" id="f_date" required>
+            </div>
+            <div>
+              <label>ผู้บันทึก</label>
+              <input type="text" id="f_recorder" placeholder="ชื่อผู้บันทึก" required>
+            </div>
+            <div>
+              <label>ผู้ตรวจสอบ</label>
+              <input type="text" id="f_inspector" placeholder="ชื่อผู้ตรวจสอบ" required>
+            </div>
+            <div>
+              <label>หมายเหตุ</label>
+              <input type="text" id="f_note" placeholder="ไม่บังคับ">
+            </div>
+            <div class="full" style="display:flex;gap:24px;">
+              <div class="check-row"><input type="checkbox" id="f_clean" checked><label style="margin:0;">ความสะอาด (ไม่มีราขึ้น/กลิ่นอับ/เชื้อรา/สิ่งปลอมปน)</label></div>
+            </div>
+            <div class="full" style="display:flex;gap:24px;">
+              <div class="check-row"><input type="checkbox" id="f_complete" checked><label style="margin:0;">ความสมบูรณ์ของจัมโบ้ (ไม่มีรอยฉีกขาด/ซ่อมแนวหลุด/เป็นแตก)</label></div>
+            </div>
+          </div>
+          <button type="submit" class="btn" style="margin-top:6px;">บันทึกการใช้งาน</button>
+        </form>`}
+      </div>
+    `;
+
+    document.getElementById('f_date') && (document.getElementById('f_date').valueAsDate = new Date());
+
+    document.getElementById('dlQr').addEventListener('click', ()=>{
+      const a = document.createElement('a');
+      a.href = qrUrl; a.download = `QR-${j.id}.png`; a.click();
+    });
+    document.getElementById('printLabel').addEventListener('click', ()=> printLabel(j, log, qrUrl));
+    document.getElementById('deleteJumbo').addEventListener('click', async ()=>{
+      const ok = confirm(`ยืนยันลบ Jumbo No.${j.jno} (${j.type}) ออกจากระบบ? ประวัติการใช้งานทั้งหมดของจัมโบ้นี้จะถูกลบด้วย`);
+      if(!ok) return;
+      try{
+        await deleteJumbo(j.id);
+        toast(`ลบ Jumbo No.${j.jno} เรียบร้อย`);
+        currentJumbo = null;
+        goTo('list');
+      }catch(err){ toast('ลบไม่สำเร็จ: ' + err.message); }
+    });
+
+    const form = document.getElementById('entryForm');
+    if(form){
+      form.addEventListener('submit', async ev=>{
+        ev.preventDefault();
+        const entry = {
+          date: document.getElementById('f_date').value,
+          clean: document.getElementById('f_clean').checked,
+          complete: document.getElementById('f_complete').checked,
+          recorder: document.getElementById('f_recorder').value.trim(),
+          inspector: document.getElementById('f_inspector').value.trim(),
+          note: document.getElementById('f_note').value.trim(),
+          ts: Date.now()
+        };
+        try{
+          const ok2 = await addLogEntry(j.id, entry);
+          if(!ok2){ toast('จัมโบ้นี้ครบกำหนดการใช้งานแล้ว'); return; }
+          toast('บันทึกการใช้งานเรียบร้อย');
+        }catch(err){ toast('บันทึกไม่สำเร็จ: ' + err.message); }
+      });
+    }
+  };
+
+  const unsub = subscribeUsage(jumboId, redraw);
+  activeUnsubs.push(unsub);
+}
+
+/* ---------------- Print label ---------------- */
+function printLabel(j, log, qrUrl){
+  const used = log.length;
+  let rows='';
+  for(let i=0;i<MAX_USES;i++){
+    const e = log[i];
+    rows += `<tr>
+      <td>${i+1}</td>
+      <td>${e?e.date:''}</td>
+      <td>${e&&e.clean?'✓':''}</td>
+      <td>${e&&e.complete?'✓':''}</td>
+      <td>${e?e.recorder:''}</td>
+      <td>${e?e.inspector:''}</td>
+      <td>${e&&e.note?e.note:''}</td>
+    </tr>`;
+  }
+  document.getElementById('printArea').innerHTML = `
+    <div style="font-family:'Noto Sans Thai',sans-serif;max-width:480px;margin:20px auto;border:1px solid #999;padding:14px;">
+      <h2 style="text-align:center;font-size:16px;margin:0 0 6px;">ป้ายระบุและควบคุมการใช้จัมโบ้</h2>
+      <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #999;border-bottom:1px solid #999;padding:8px 0;margin-bottom:8px;">
+        <div style="font-size:13px;">
+          <div><strong>Jumbo No.:</strong> No.${j.jno}</div>
+          <div><strong>ชนิดข้าว:</strong> ${j.type}</div>
+          <div><strong>ใช้งานแล้ว:</strong> ${used}/${MAX_USES} ครั้ง</div>
+        </div>
+        <img src="${qrUrl}" width="90" height="90">
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:10.5px;">
+        <thead><tr>
+          <th style="border:1px solid #999;padding:3px;">ครั้งที่</th>
+          <th style="border:1px solid #999;padding:3px;">วันที่ใช้งาน</th>
+          <th style="border:1px solid #999;padding:3px;">สะอาด</th>
+          <th style="border:1px solid #999;padding:3px;">สมบูรณ์</th>
+          <th style="border:1px solid #999;padding:3px;">ผู้บันทึก</th>
+          <th style="border:1px solid #999;padding:3px;">ผู้ตรวจสอบ</th>
+          <th style="border:1px solid #999;padding:3px;">หมายเหตุ</th>
+        </tr></thead>
+        <tbody>${rows.replace(/<td>/g,'<td style="border:1px solid #999;padding:3px;text-align:center;">')}</tbody>
+      </table>
+    </div>`;
+  window.print();
+}
+
+/* ---------------- Scan view ---------------- */
+let scanStream = null;
+let scanRAF = null;
+
+async function renderScan(){
+  const panel = document.getElementById('panel');
+  panel.innerHTML = `
+    <div class="section-title"><strong>สแกน QR จัมโบ้</strong></div>
+    <div class="scan-wrap">
+      <div class="viewfinder">
+        <video id="scanVideo" playsinline muted></video>
+        <div class="corner tl"></div><div class="corner tr"></div>
+        <div class="corner bl"></div><div class="corner br"></div>
+      </div>
+      <div class="scan-msg" id="scanMsg">กำลังขอสิทธิ์เข้าถึงกล้อง...</div>
+      <div class="manual-scan">
+        <label>หรือเลือกจัมโบ้ด้วยตนเอง</label>
+        <select id="manualSelect" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:3px;font-family:'Noto Sans Thai';">
+          <option value="">— เลือกจัมโบ้ —</option>
+        </select>
+        <button class="btn small" id="manualGo" style="margin-top:10px;">ไปที่จัมโบ้นี้</button>
+      </div>
+    </div>
+  `;
+  jumbosCache = await fetchJumbosOnce();
+  const select = document.getElementById('manualSelect');
+  select.innerHTML = '<option value="">— เลือกจัมโบ้ —</option>' +
+    jumbosCache.map(j=>`<option value="${j.id}">Jumbo No.${j.jno} — ${j.type}</option>`).join('');
+
+  document.getElementById('manualGo').addEventListener('click', ()=>{
+    const val = document.getElementById('manualSelect').value;
+    if(val){ currentJumbo=val; renderDetail(val); }
+  });
+  startScanner();
+}
+
+async function startScanner(){
+  const video = document.getElementById('scanVideo');
+  const msg = document.getElementById('scanMsg');
+  try{
+    scanStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    video.srcObject = scanStream;
+    await video.play();
+    msg.textContent = 'เล็งกล้องไปที่ QR Code บนป้ายจัมโบ้';
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const tick = ()=>{
+      if(video.readyState===video.HAVE_ENOUGH_DATA){
+        canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+        ctx.drawImage(video,0,0,canvas.width,canvas.height);
+        const img = ctx.getImageData(0,0,canvas.width,canvas.height);
+        const code = jsQR(img.data, img.width, img.height);
+        if(code && code.data){
+          const found = jumbosCache.find(j=>j.id===code.data.trim());
+          if(found){
+            stopScanner();
+            toast(`พบ Jumbo No.${found.jno} — ${found.type}`);
+            currentJumbo = found.id;
+            renderDetail(found.id);
+            return;
+          }
+        }
+      }
+      scanRAF = requestAnimationFrame(tick);
+    };
+    scanRAF = requestAnimationFrame(tick);
+  }catch(err){
+    msg.textContent = 'ไม่สามารถเข้าถึงกล้องได้ในอุปกรณ์นี้ กรุณาเลือกจัมโบ้ด้วยตนเองด้านล่าง';
+  }
+}
+
+function stopScanner(){
+  if(scanRAF){ cancelAnimationFrame(scanRAF); scanRAF=null; }
+  if(scanStream){ scanStream.getTracks().forEach(t=>t.stop()); scanStream=null; }
+}
+
+/* ---------------- Export view ---------------- */
+async function renderExport(){
+  const panel = document.getElementById('panel');
+  panel.innerHTML = `
+    <div class="section-title"><strong>ส่งออกข้อมูลเป็น Excel</strong></div>
+    <div class="export-box">
+      <p id="exportIntro">กำลังโหลดข้อมูล...</p>
+      <button class="btn" id="exportBtn">ดาวน์โหลดไฟล์ Excel</button>
+      <table class="summary-table" id="summaryPreview"><tr><td>กำลังโหลดข้อมูล...</td></tr></table>
+    </div>
+  `;
+  const jumbos = await fetchJumbosOnce();
+  const logs = {};
+  for(const j of jumbos){ logs[j.id] = await loadLog(j.id); }
+
+  document.getElementById('exportIntro').innerHTML =
+    `ส่งออกข้อมูลการใช้งานของจัมโบ้ทั้งหมด ${jumbos.length} รายการ เป็นไฟล์ Excel (.xlsx) ประกอบด้วย 2 ชีต:
+    <br>1) สรุปภาพรวม — จำนวนครั้งที่ใช้และสถานะของแต่ละจัมโบ้
+    <br>2) บันทึกการใช้งาน — รายละเอียดทุกครั้งที่บันทึกของทุกจัมโบ้`;
+  const preview = document.getElementById('summaryPreview');
+  preview.innerHTML = `<tr><th>Jumbo No.</th><th>ชนิดข้าว</th><th>ใช้งานแล้ว</th><th>สถานะ</th></tr>` +
+    jumbos.map(j=>{
+      const used = (logs[j.id]||[]).length;
+      const status = used>=MAX_USES ? 'ครบกำหนด' : (used>=MAX_USES-3 ? 'ใกล้ครบกำหนด' : 'ปกติ');
+      return `<tr><td>${j.jno}</td><td>${j.type}</td><td>${used}/${MAX_USES}</td><td>${status}</td></tr>`;
+    }).join('');
+
+  document.getElementById('exportBtn').addEventListener('click', ()=> exportExcel(jumbos, logs));
+}
+
+function exportExcel(jumbos, logs){
+  const summaryRows = jumbos.map(j=>{
+    const used = (logs[j.id]||[]).length;
+    const status = used>=MAX_USES ? 'ครบกำหนดการใช้งาน' : (used>=MAX_USES-3 ? 'ใกล้ครบกำหนด' : 'ใช้งานปกติ');
+    return {
+      'Jumbo No.': j.jno,
+      'รหัสจัมโบ้': j.id,
+      'ชนิดข้าว': j.type,
+      'จำนวนครั้งที่ใช้': used,
+      'จำกัดสูงสุด': MAX_USES,
+      'คงเหลือ': Math.max(0, MAX_USES-used),
+      'สถานะ': status
+    };
+  });
+
+  const detailRows = [];
+  jumbos.forEach(j=>{
+    const log = logs[j.id]||[];
+    if(log.length===0){
+      detailRows.push({'Jumbo No.':j.jno,'รหัสจัมโบ้':j.id,'ชนิดข้าว':j.type,'ครั้งที่':'','วันที่ใช้งาน':'','ความสะอาด':'','ความสมบูรณ์':'','ผู้บันทึก':'','ผู้ตรวจสอบ':'','หมายเหตุ':''});
+      return;
+    }
+    log.forEach((e,i)=>{
+      detailRows.push({
+        'Jumbo No.': j.jno,
+        'รหัสจัมโบ้': j.id,
+        'ชนิดข้าว': j.type,
+        'ครั้งที่': i+1,
+        'วันที่ใช้งาน': e.date,
+        'ความสะอาด': e.clean?'✓':'',
+        'ความสมบูรณ์': e.complete?'✓':'',
+        'ผู้บันทึก': e.recorder,
+        'ผู้ตรวจสอบ': e.inspector,
+        'หมายเหตุ': e.note||''
+      });
+    });
+  });
+
+  const wb = XLSX.utils.book_new();
+  const ws1 = XLSX.utils.json_to_sheet(summaryRows);
+  const ws2 = XLSX.utils.json_to_sheet(detailRows);
+  XLSX.utils.book_append_sheet(wb, ws1, 'สรุปจัมโบ้');
+  XLSX.utils.book_append_sheet(wb, ws2, 'บันทึกการใช้งาน');
+  const dateStr = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `jumbo-usage-log-${dateStr}.xlsx`);
+  toast('ดาวน์โหลดไฟล์ Excel เรียบร้อย');
+}
+
+/* ---------------- Init ---------------- */
+initApp();
+</script>
+</body>
+</html>
