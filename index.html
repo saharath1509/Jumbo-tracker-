@@ -241,14 +241,17 @@
 <div id="printArea"></div>
 
 <script>
+/* ==================================================================
+   ตั้งค่าฐานข้อมูล Firebase (แก้ค่าด้านล่างนี้เป็นของโปรเจกต์คุณเอง)
+   วิธีขอค่านี้: ดูขั้นตอนในคู่มือการใช้งานที่แนบมาพร้อมไฟล์นี้
+   ================================================================== */
 const firebaseConfig = {
-  apiKey: "AIzaSyCRBUgfZzh53ST_HGfoLDblJtdGmDfIV_s",
-  authDomain: "jumbo-qr-tracker-datafirebase.firebaseapp.com",
-  projectId: "jumbo-qr-tracker-datafirebase",
-  storageBucket: "jumbo-qr-tracker-datafirebase.firebasestorage.app",
-  messagingSenderId: "730251543567",
-  appId: "1:730251543567:web:76e215e44c03bd04ca4f7a",
-  measurementId: "G-1YR92HZ87J"
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
 };
 
 const NOT_CONFIGURED = !firebaseConfig.apiKey || firebaseConfig.apiKey.indexOf('YOUR_') === 0;
@@ -484,19 +487,28 @@ async function renderList(){
 
   let latestJumbos = [];
   let latestUsage = {};
+  let renderSeq = 0; // ป้องกันการวาดซ้ำเมื่อมีข้อมูลใหม่เข้ามาระหว่างกำลังวาดรอบเก่ายังไม่เสร็จ
 
   const redraw = async ()=>{
-    jumbosCache = latestJumbos;
-    document.getElementById('jCount').textContent = `${latestJumbos.length} รายการ`;
+    const mySeq = ++renderSeq;
+    const jumbos = latestJumbos;
+    const usage = latestUsage;
+
+    jumbosCache = jumbos;
+    document.getElementById('jCount').textContent = `${jumbos.length} รายการ`;
     const grid = document.getElementById('grid');
     if(!grid) return;
-    if(latestJumbos.length===0){
+    if(jumbos.length===0){
+      if(mySeq !== renderSeq) return; // มีรอบใหม่กว่าแซงเข้ามาแล้ว ทิ้งรอบนี้
       grid.innerHTML = '<div style="color:var(--ink-soft);font-size:13.5px;">ยังไม่มีจัมโบ้ในระบบ กด "+ เพิ่มจัมโบ้ใหม่" เพื่อเริ่มต้น</div>';
       return;
     }
-    grid.innerHTML = '';
-    for(const j of latestJumbos){
-      const log = latestUsage[j.id] || [];
+
+    // เตรียม QR และเนื้อหาการ์ดทั้งหมดให้เสร็จก่อน โดยยังไม่แตะ DOM ระหว่างรอ
+    const cards = [];
+    for(const j of jumbos){
+      if(mySeq !== renderSeq) return; // มีรอบใหม่กว่าแซงเข้ามาระหว่างเตรียมข้อมูล ทิ้งรอบนี้ทันที
+      const log = usage[j.id] || [];
       const used = log.length;
       const pct = Math.min(100, Math.round(used/MAX_USES*100));
       const qrUrl = await makeQrDataUrl(j.id, 90);
@@ -519,8 +531,12 @@ async function renderList(){
         <span class="status-pill status-${statusClass}">${statusText}</span>
       `;
       card.addEventListener('click', ()=>{ currentJumbo=j.id; renderDetail(j.id); });
-      grid.appendChild(card);
+      cards.push(card);
     }
+
+    if(mySeq !== renderSeq) return; // มีรอบใหม่กว่าเสร็จก่อน ไม่ต้องวาดรอบนี้ทับ
+    grid.innerHTML = '';
+    cards.forEach(c=> grid.appendChild(c));
   };
 
   const unsubJ = subscribeJumbos(list=>{ latestJumbos = list.sort((a,b)=> a.type===b.type ? a.jno-b.jno : a.type.localeCompare(b.type)); redraw(); });
