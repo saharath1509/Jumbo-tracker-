@@ -223,7 +223,7 @@
       <div class="brand-mark"></div>
       <div>
         <h1>ป้ายระบุและควบคุมการใช้จัมโบ้</h1>
-        <div class="sub">ระบบติดตามการใช้งานจัมโบ้ด้วย QR Code &nbsp;·&nbsp; จำกัดการใช้งานไม่เกิน 20 ครั้งต่อจัมโบ้</div>
+        <div class="sub">ระบบติดตามการใช้งานจัมโบ้ด้วย QR Code &nbsp;·&nbsp; ข้าวไทยไม่เกิน 20 ครั้ง / ข้าวญี่ปุ่นไม่เกิน 5 ครั้งต่อจัมโบ้</div>
         <div class="sub" id="connStatus" style="margin-top:4px;">กำลังเชื่อมต่อฐานข้อมูล...</div>
       </div>
     </div>
@@ -246,7 +246,7 @@
    วิธีขอค่านี้: ดูขั้นตอนในคู่มือการใช้งานที่แนบมาพร้อมไฟล์นี้
    ================================================================== */
 const firebaseConfig = {
-   apiKey: "AIzaSyCRBUgfZzh53ST_HGfoLDblJtdGmDfIV_s",
+  apiKey: "AIzaSyCRBUgfZzh53ST_HGfoLDblJtdGmDfIV_s",
   authDomain: "jumbo-qr-tracker-datafirebase.firebaseapp.com",
   projectId: "jumbo-qr-tracker-datafirebase",
   storageBucket: "jumbo-qr-tracker-datafirebase.firebasestorage.app",
@@ -312,7 +312,9 @@ function showSetupScreen(){
 /* ---------------- Data model ---------------- */
 const TYPE_OPTIONS = ['ข้าวไทย', 'ข้าวญี่ปุ่น'];
 const TYPE_ABBR = { 'ข้าวไทย': 'TH', 'ข้าวญี่ปุ่น': 'JP' };
-const MAX_USES = 20;
+const MAX_USES = 20; // ค่าเริ่มต้น (ใช้กับชนิดข้าวที่ไม่ได้กำหนดไว้เฉพาะ)
+const MAX_USES_BY_TYPE = { 'ข้าวไทย': 20, 'ข้าวญี่ปุ่น': 5 };
+function getMaxUses(type){ return MAX_USES_BY_TYPE[type] || MAX_USES; }
 
 function genId(){
   return 'JB-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2,5).toUpperCase();
@@ -380,11 +382,11 @@ async function loadLog(jumboId){
   return doc.exists ? (doc.data().entries || []) : [];
 }
 
-async function addLogEntry(jumboId, entry){
+async function addLogEntry(jumboId, entry, maxUses){
   const ref = db.collection('usage').doc(jumboId);
   const doc = await ref.get();
   const current = doc.exists ? (doc.data().entries || []) : [];
-  if(current.length >= MAX_USES) return false;
+  if(current.length >= (maxUses || MAX_USES)) return false;
   current.push(entry);
   await ref.set({ entries: current });
   return true;
@@ -511,11 +513,12 @@ async function renderList(){
       if(mySeq !== renderSeq) return; // มีรอบใหม่กว่าแซงเข้ามาระหว่างเตรียมข้อมูล ทิ้งรอบนี้ทันที
       const log = usage[j.id] || [];
       const used = log.length;
-      const pct = Math.min(100, Math.round(used/MAX_USES*100));
+      const maxUses = getMaxUses(j.type);
+      const pct = Math.min(100, Math.round(used/maxUses*100));
       const qrUrl = await makeQrDataUrl(j.id, 90);
       let statusClass='ok', statusText='ใช้งานปกติ', meterClass='';
-      if(used>=MAX_USES){ statusClass='full'; statusText='ครบกำหนดการใช้งาน'; meterClass='full'; }
-      else if(used>=MAX_USES-3){ statusClass='warn'; statusText='ใกล้ครบกำหนด'; meterClass='warn'; }
+      if(used>=maxUses){ statusClass='full'; statusText='ครบกำหนดการใช้งาน'; meterClass='full'; }
+      else if(used>=maxUses-3){ statusClass='warn'; statusText='ใกล้ครบกำหนด'; meterClass='warn'; }
 
       const card = document.createElement('div');
       card.className='tag-card';
@@ -526,7 +529,7 @@ async function renderList(){
         <div class="name">${j.type}</div>
         <div class="qr-thumb"><img src="${qrUrl}" alt="QR ${j.id}"></div>
         <div class="meter-row">
-          <div class="meter-label"><span>ใช้งานแล้ว</span><span>${used}/${MAX_USES}</span></div>
+          <div class="meter-label"><span>ใช้งานแล้ว</span><span>${used}/${maxUses}</span></div>
           <div class="meter ${meterClass}"><span style="width:${pct}%"></span></div>
         </div>
         <span class="status-pill status-${statusClass}">${statusText}</span>
@@ -566,9 +569,10 @@ async function renderDetail(jumboId){
     if(active && active.closest && active.closest('#entryForm')) return;
 
     const used = log.length;
-    const limitReached = used>=MAX_USES;
+    const maxUses = getMaxUses(j.type);
+    const limitReached = used>=maxUses;
     let rows = '';
-    for(let i=0;i<MAX_USES;i++){
+    for(let i=0;i<maxUses;i++){
       const e = log[i];
       rows += `<tr>
         <td class="rownum">${i+1}</td>
@@ -613,7 +617,7 @@ async function renderDetail(jumboId){
 
       <div class="form-box">
         <h3 style="font-size:15px;margin-bottom:12px;">บันทึกการใช้งานครั้งที่ ${used+1}</h3>
-        ${limitReached ? `<div class="limit-note">จัมโบ้นี้ใช้งานครบ ${MAX_USES} ครั้งแล้ว กรุณาเปลี่ยนจัมโบ้ใหม่ ไม่สามารถบันทึกเพิ่มได้</div>` : `
+        ${limitReached ? `<div class="limit-note">จัมโบ้นี้ใช้งานครบ ${maxUses} ครั้งแล้ว กรุณาเปลี่ยนจัมโบ้ใหม่ ไม่สามารถบันทึกเพิ่มได้</div>` : `
         <form id="entryForm">
           <div class="form-grid">
             <div>
@@ -676,7 +680,7 @@ async function renderDetail(jumboId){
           ts: Date.now()
         };
         try{
-          const ok2 = await addLogEntry(j.id, entry);
+          const ok2 = await addLogEntry(j.id, entry, getMaxUses(j.type));
           if(!ok2){ toast('จัมโบ้นี้ครบกำหนดการใช้งานแล้ว'); return; }
           toast('บันทึกการใช้งานเรียบร้อย');
         }catch(err){ toast('บันทึกไม่สำเร็จ: ' + err.message); }
@@ -691,8 +695,9 @@ async function renderDetail(jumboId){
 /* ---------------- Print label ---------------- */
 function printLabel(j, log, qrUrl){
   const used = log.length;
+  const maxUses = getMaxUses(j.type);
   let rows='';
-  for(let i=0;i<MAX_USES;i++){
+  for(let i=0;i<maxUses;i++){
     const e = log[i];
     rows += `<tr>
       <td>${i+1}</td>
@@ -711,7 +716,7 @@ function printLabel(j, log, qrUrl){
         <div style="font-size:13px;">
           <div><strong>Jumbo No.:</strong> No.${j.jno}</div>
           <div><strong>ชนิดข้าว:</strong> ${j.type}</div>
-          <div><strong>ใช้งานแล้ว:</strong> ${used}/${MAX_USES} ครั้ง</div>
+          <div><strong>ใช้งานแล้ว:</strong> ${used}/${maxUses} ครั้ง</div>
         </div>
         <img src="${qrUrl}" width="90" height="90">
       </div>
@@ -830,8 +835,9 @@ async function renderExport(){
   preview.innerHTML = `<tr><th>Jumbo No.</th><th>ชนิดข้าว</th><th>ใช้งานแล้ว</th><th>สถานะ</th></tr>` +
     jumbos.map(j=>{
       const used = (logs[j.id]||[]).length;
-      const status = used>=MAX_USES ? 'ครบกำหนด' : (used>=MAX_USES-3 ? 'ใกล้ครบกำหนด' : 'ปกติ');
-      return `<tr><td>${j.jno}</td><td>${j.type}</td><td>${used}/${MAX_USES}</td><td>${status}</td></tr>`;
+      const maxUses = getMaxUses(j.type);
+      const status = used>=maxUses ? 'ครบกำหนด' : (used>=maxUses-3 ? 'ใกล้ครบกำหนด' : 'ปกติ');
+      return `<tr><td>${j.jno}</td><td>${j.type}</td><td>${used}/${maxUses}</td><td>${status}</td></tr>`;
     }).join('');
 
   document.getElementById('exportBtn').addEventListener('click', ()=> exportExcel(jumbos, logs));
@@ -840,14 +846,15 @@ async function renderExport(){
 function exportExcel(jumbos, logs){
   const summaryRows = jumbos.map(j=>{
     const used = (logs[j.id]||[]).length;
-    const status = used>=MAX_USES ? 'ครบกำหนดการใช้งาน' : (used>=MAX_USES-3 ? 'ใกล้ครบกำหนด' : 'ใช้งานปกติ');
+    const maxUses = getMaxUses(j.type);
+    const status = used>=maxUses ? 'ครบกำหนดการใช้งาน' : (used>=maxUses-3 ? 'ใกล้ครบกำหนด' : 'ใช้งานปกติ');
     return {
       'Jumbo No.': j.jno,
       'รหัสจัมโบ้': j.id,
       'ชนิดข้าว': j.type,
       'จำนวนครั้งที่ใช้': used,
-      'จำกัดสูงสุด': MAX_USES,
-      'คงเหลือ': Math.max(0, MAX_USES-used),
+      'จำกัดสูงสุด': maxUses,
+      'คงเหลือ': Math.max(0, maxUses-used),
       'สถานะ': status
     };
   });
