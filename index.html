@@ -9,9 +9,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root{
     --paper:#F1ECDF;
@@ -206,6 +204,33 @@
   .setup-screen code{background:var(--paper-2);padding:1px 6px;border-radius:3px;font-size:12.5px;}
   .setup-screen .warn-box{background:#F3DAD5;color:var(--red);padding:10px 12px;border-radius:4px;font-size:12.5px;margin-top:14px;}
 
+  /* user gate (sign-in) */
+  .user-gate{max-width:400px;margin:60px auto;background:var(--card);border:1px solid var(--line);border-radius:6px;padding:28px;text-align:center;}
+  .user-gate h2{font-size:18px;margin-bottom:8px;}
+  .user-gate p{font-size:13.5px;color:var(--ink-soft);margin-bottom:18px;}
+  .user-gate input[type=text]{width:100%;padding:10px;border:1px solid var(--line);border-radius:4px;font-family:'Noto Sans Thai';font-size:14px;margin-bottom:12px;}
+  #gsiButtonHolder{display:flex;justify-content:center;margin-bottom:6px;}
+  .user-badge{display:flex;align-items:center;gap:8px;font-size:12px;color:#CFE0CE;margin-top:4px;}
+  .user-badge .switch-link{color:#CFE0CE;text-decoration:underline;cursor:pointer;background:none;border:none;font-size:12px;padding:0;font-family:'Noto Sans Thai';}
+
+  /* quick action screen */
+  .quick-card{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:22px;text-align:center;max-width:460px;margin:0 auto;}
+  .quick-card .jtitle{font-family:'Noto Serif Thai';font-size:15px;color:var(--green);font-weight:600;}
+  .quick-card .jtype{font-size:26px;font-weight:700;font-family:'Noto Serif Thai';margin:2px 0 14px;}
+  .quick-status{font-size:15px;font-weight:600;padding:12px;border-radius:5px;margin-bottom:18px;}
+  .quick-status.ok{background:#E4EEE0;color:var(--green-deep);}
+  .quick-status.warn{background:#F3E6CE;color:#7A5A1E;}
+  .quick-status.bad{background:#F3DAD5;color:var(--red);}
+  .quick-actions{display:flex;gap:12px;flex-direction:column;}
+  .quick-btn{
+    padding:22px 16px;border-radius:8px;font-size:20px;font-weight:700;font-family:'Noto Sans Thai';
+    border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;
+  }
+  .quick-btn.use{background:var(--green-deep);color:var(--paper);}
+  .quick-btn.damaged{background:var(--red);color:#fff;}
+  .quick-btn:disabled{opacity:.4;cursor:not-allowed;}
+  .toggle-details{margin-top:18px;background:none;border:none;color:var(--ink-soft);font-size:12.5px;text-decoration:underline;cursor:pointer;font-family:'Noto Sans Thai';}
+
   /* print */
   #printArea{display:none;}
   @media print{
@@ -225,6 +250,7 @@
         <h1>ป้ายระบุและควบคุมการใช้จัมโบ้</h1>
         <div class="sub">ระบบติดตามการใช้งานจัมโบ้ด้วย QR Code &nbsp;·&nbsp; ข้าวไทยไม่เกิน 20 ครั้ง / ข้าวญี่ปุ่นไม่เกิน 5 ครั้งต่อจัมโบ้</div>
         <div class="sub" id="connStatus" style="margin-top:4px;">กำลังเชื่อมต่อฐานข้อมูล...</div>
+        <div class="user-badge" id="userBadge" style="display:none;"></div>
       </div>
     </div>
   </div>
@@ -242,39 +268,127 @@
 
 <script>
 /* ==================================================================
-   ตั้งค่าฐานข้อมูล Firebase (แก้ค่าด้านล่างนี้เป็นของโปรเจกต์คุณเอง)
+   ตั้งค่าการเชื่อมต่อ Google Sheet (แก้ 2 ค่าด้านล่างนี้)
    วิธีขอค่านี้: ดูขั้นตอนในคู่มือการใช้งานที่แนบมาพร้อมไฟล์นี้
    ================================================================== */
-const firebaseConfig = {
-  apiKey: "AIzaSyCRBUgfZzh53ST_HGfoLDblJtdGmDfIV_s",
-  authDomain: "jumbo-qr-tracker-datafirebase.firebaseapp.com",
-  projectId: "jumbo-qr-tracker-datafirebase",
-  storageBucket: "jumbo-qr-tracker-datafirebase.firebasestorage.app",
-  messagingSenderId: "730251543567",
-  appId: "1:730251543567:web:76e215e44c03bd04ca4f7a",
-  measurementId: "G-1YR92HZ87J"
-};
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyaYW5tFThoKBmIVLt6ZHE8VHZHZfIV-7a06foLKcGn8GjDtov5Yi5NfMVQKj6KdPQ9/exec";
+const APPS_SCRIPT_TOKEN = "1234";
 
-const NOT_CONFIGURED = !firebaseConfig.apiKey || firebaseConfig.apiKey.indexOf('YOUR_') === 0;
+/* ==================================================================
+   ตั้งค่า Google Sign-In (ไม่บังคับ) — ใส่ Client ID เพื่อให้ผู้ใช้ล็อกอินด้วย
+   บัญชี Google แล้วระบบดึงชื่อมาใช้เป็น "ผู้บันทึก" ให้อัตโนมัติ ไม่ต้องพิมพ์เอง
+   ถ้าไม่ตั้งค่า จะถามให้พิมพ์ชื่อครั้งเดียวแล้วจำไว้ในเครื่องแทน
+   ================================================================== */
+const GOOGLE_CLIENT_ID = "PASTE_YOUR_GOOGLE_CLIENT_ID_HERE";
+const GOOGLE_CONFIGURED = GOOGLE_CLIENT_ID.indexOf('PASTE_') !== 0;
 
-let db = null;
+const NOT_CONFIGURED = APPS_SCRIPT_URL.indexOf('PASTE_') === 0 || APPS_SCRIPT_TOKEN.indexOf('PASTE_') === 0;
+const POLL_MS = 7000; // ความถี่ในการดึงข้อมูลใหม่จาก Google Sheet (มิลลิวินาที)
+
 let dbReady = false;
+let currentUser = null; // { name, email }
+
+function loadUser(){
+  try{
+    const raw = localStorage.getItem('jumbo_user');
+    currentUser = raw ? JSON.parse(raw) : null;
+  }catch(e){ currentUser = null; }
+}
+function saveUser(u){
+  currentUser = u;
+  try{ localStorage.setItem('jumbo_user', JSON.stringify(u)); }catch(e){}
+  renderUserBadge();
+}
+function clearUser(){
+  currentUser = null;
+  try{ localStorage.removeItem('jumbo_user'); }catch(e){}
+  renderUserBadge();
+  renderUserGate();
+}
+function renderUserBadge(){
+  const el = document.getElementById('userBadge');
+  if(!el) return;
+  if(!currentUser){ el.style.display='none'; return; }
+  el.style.display='flex';
+  el.innerHTML = `<span>ผู้ใช้งาน: ${currentUser.name}</span><button class="switch-link" id="switchUserBtn">เปลี่ยนผู้ใช้</button>`;
+  document.getElementById('switchUserBtn').addEventListener('click', clearUser);
+}
+
+function decodeJwt_(token){
+  const payload = token.split('.')[1];
+  const json = decodeURIComponent(atob(payload.replace(/-/g,'+').replace(/_/g,'/')).split('').map(c=>
+    '%' + ('00'+c.charCodeAt(0).toString(16)).slice(-2)
+  ).join(''));
+  return JSON.parse(json);
+}
+
+function renderUserGate(){
+  document.querySelectorAll('.tab').forEach(b=>b.style.display='none');
+  const panel = document.getElementById('panel');
+  if(GOOGLE_CONFIGURED){
+    panel.innerHTML = `
+      <div class="user-gate">
+        <h2>เข้าสู่ระบบ</h2>
+        <p>ลงชื่อเข้าใช้ด้วยบัญชี Google เพื่อใช้ชื่อของคุณเป็นผู้บันทึกอัตโนมัติ ไม่ต้องพิมพ์ชื่อทุกครั้ง</p>
+        <div id="gsiButtonHolder">กำลังโหลด...</div>
+      </div>`;
+    let tries = 0;
+    const tryInit = ()=>{
+      if(window.google && google.accounts && google.accounts.id){
+        document.getElementById('gsiButtonHolder').innerHTML = '';
+        google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: (resp)=>{
+            try{
+              const profile = decodeJwt_(resp.credential);
+              saveUser({ name: profile.name || profile.email, email: profile.email });
+              document.querySelectorAll('.tab').forEach(b=>b.style.display='');
+              goTo('list');
+            }catch(e){ toast('เข้าสู่ระบบไม่สำเร็จ: ' + e.message); }
+          }
+        });
+        google.accounts.id.renderButton(document.getElementById('gsiButtonHolder'), { theme:'filled_black', size:'large', shape:'pill', text:'signin_with' });
+      } else if(tries++ < 40){
+        setTimeout(tryInit, 150);
+      } else {
+        document.getElementById('gsiButtonHolder').innerHTML = '<div style="color:var(--red);font-size:12.5px;">โหลด Google Sign-In ไม่สำเร็จ ตรวจสอบการเชื่อมต่ออินเทอร์เน็ตแล้วรีเฟรชหน้าใหม่</div>';
+      }
+    };
+    tryInit();
+  } else {
+    panel.innerHTML = `
+      <div class="user-gate">
+        <h2>ก่อนเริ่มใช้งาน</h2>
+        <p>พิมพ์ชื่อของคุณ ระบบจะจำไว้ในเครื่องนี้ ไม่ต้องพิมพ์ซ้ำทุกครั้งที่บันทึกการใช้งาน</p>
+        <input type="text" id="manualNameInput" placeholder="ชื่อ-นามสกุลของคุณ">
+        <button class="btn" id="manualNameBtn" style="width:100%;">เริ่มใช้งาน</button>
+      </div>`;
+    document.getElementById('manualNameBtn').addEventListener('click', ()=>{
+      const name = document.getElementById('manualNameInput').value.trim();
+      if(!name){ toast('กรุณากรอกชื่อก่อน'); return; }
+      saveUser({ name, email: '' });
+      document.querySelectorAll('.tab').forEach(b=>b.style.display='');
+      goTo('list');
+    });
+  }
+}
 
 async function initApp(){
   if(NOT_CONFIGURED){
     showSetupScreen();
     return;
   }
+  setConnStatus('กำลังเชื่อมต่อ Google Sheet...', true);
   try{
-    firebase.initializeApp(firebaseConfig);
-    db = firebase.firestore();
-    await firebase.auth().signInAnonymously();
+    await apiGet('list');
     dbReady = true;
-    setConnStatus('เชื่อมต่อฐานข้อมูลสำเร็จ · ข้อมูลซิงค์แบบเรียลไทม์', true);
-    goTo('list');
+    setConnStatus('เชื่อมต่อ Google Sheet สำเร็จ · อัปเดตข้อมูลอัตโนมัติทุก ' + Math.round(POLL_MS/1000) + ' วินาที', true);
+    loadUser();
+    if(currentUser){ renderUserBadge(); goTo('list'); }
+    else{ renderUserGate(); }
   }catch(err){
     console.error(err);
-    setConnStatus('เชื่อมต่อฐานข้อมูลไม่สำเร็จ: ' + (err && err.message ? err.message : err), false);
+    setConnStatus('เชื่อมต่อ Google Sheet ไม่สำเร็จ: ' + (err && err.message ? err.message : err), false);
     showSetupScreen();
   }
 }
@@ -288,24 +402,22 @@ function setConnStatus(text, ok){
 }
 
 function showSetupScreen(){
-  setConnStatus('ยังไม่ได้ตั้งค่าฐานข้อมูล', false);
+  setConnStatus('ยังไม่ได้เชื่อมต่อ Google Sheet', false);
   document.querySelectorAll('.tab').forEach(b=>b.style.display='none');
   const panel = document.getElementById('panel');
   panel.innerHTML = `
     <div class="setup-screen">
-      <h2>ยังไม่ได้เชื่อมต่อฐานข้อมูล</h2>
-      <p style="font-size:13.5px;color:var(--ink-soft);">แอปนี้ใช้ Firebase Firestore (ฟรี) เป็นฐานข้อมูลกลาง เพื่อให้ทุกคนที่เปิดไฟล์นี้ ไม่ว่าจากเครื่องหรือที่ไหน เห็นข้อมูลจัมโบ้ชุดเดียวกันแบบเรียลไทม์ (ไม่มีดีเลย์) ต้องตั้งค่าครั้งเดียวก่อนใช้งานจริง (ดูขั้นตอนละเอียดในคู่มือการใช้งานที่แนบมาด้วย) สรุปคร่าวๆ:</p>
+      <h2>ยังไม่ได้เชื่อมต่อฐานข้อมูล (Google Sheet)</h2>
+      <p style="font-size:13.5px;color:var(--ink-soft);">แอปนี้เก็บข้อมูลจัมโบ้ทั้งหมดไว้ใน Google Sheet ของคุณเอง (อยู่ใน Google Drive/Google One ของบัญชีคุณ) ผ่านตัวกลางที่เรียกว่า Google Apps Script Web App เพื่อให้ทุกคนที่เปิดเว็บนี้เห็นข้อมูลชุดเดียวกัน ต้องตั้งค่าครั้งเดียวก่อนใช้งานจริง (ดูขั้นตอนละเอียดในคู่มือการใช้งานที่แนบมาด้วย) สรุปคร่าวๆ:</p>
       <ol>
-        <li>สร้างโปรเจกต์ฟรีที่ <code>console.firebase.google.com</code></li>
-        <li>เมนู Build → <b>Firestore Database</b> → สร้างฐานข้อมูล (โหมด Production)</li>
-        <li>เมนู Build → <b>Authentication</b> → Sign-in method → เปิดใช้งาน <b>Anonymous</b></li>
-        <li>ไอคอนเฟือง → Project settings → เลื่อนลงหา "Your apps" → กด <code>&lt;/&gt;</code> เพื่อลงทะเบียนเว็บแอป → คัดลอกค่า <code>firebaseConfig</code></li>
-        <li>เปิดไฟล์ HTML นี้ด้วยโปรแกรมแก้ไขข้อความ แล้วนำค่าที่คัดลอกมาแทนที่ตัวแปร <code>firebaseConfig</code> ที่ต้นไฟล์สคริปต์</li>
-        <li>ไปที่ Firestore → แท็บ Rules แล้ววางกฎนี้ก่อนกด Publish:
-          <br><code>allow read, write: if request.auth != null;</code></li>
-        <li>บันทึกไฟล์แล้วอัปโหลดขึ้นเว็บโฮสต์/อินทราเน็ต/GitHub Pages (ต้องเป็น HTTPS หากต้องการใช้กล้องสแกน QR)</li>
+        <li>สร้าง Google Sheet ใหม่ 1 ไฟล์</li>
+        <li>เมนู ส่วนขยาย (Extensions) → Apps Script วางโค้ด <code>Code.gs</code> ที่แนบมาให้</li>
+        <li>แก้ค่า <code>SECRET_TOKEN</code> ในโค้ดเป็นรหัสลับที่ตั้งเอง</li>
+        <li>รันฟังก์ชัน <code>setupSheets</code> หนึ่งครั้ง (เพื่อสร้างชีตและข้อมูลตัวอย่าง)</li>
+        <li>กด Deploy → New deployment → ประเภท Web app → Execute as: Me → Who has access: Anyone → Deploy แล้วคัดลอก Web app URL</li>
+        <li>นำ URL และรหัสลับมาใส่ในไฟล์ HTML นี้ที่ตัวแปร <code>APPS_SCRIPT_URL</code> และ <code>APPS_SCRIPT_TOKEN</code> ที่ต้นไฟล์สคริปต์ แล้วบันทึกไฟล์</li>
       </ol>
-      <div class="warn-box">ค่า firebaseConfig ไม่ใช่ความลับ แต่ข้อมูลจะปลอดภัยจาก Rules ที่ตั้งไว้เท่านั้น — อย่าใช้กฎ <code>allow read, write: if true;</code> แบบเปิดสาธารณะ เพราะใครก็เขียนข้อมูลได้</div>
+      <div class="warn-box">Web app URL และ token ไม่ควรเผยแพร่สู่สาธารณะโดยไม่จำเป็น เพราะใครมีทั้งสองค่านี้จะเรียกข้อมูล/แก้ไขข้อมูลในชีตของคุณได้ — เป็นการป้องกันเบื้องต้นเท่านั้น ไม่ใช่ระบบรักษาความปลอดภัยแบบเข้มงวด</div>
     </div>`;
 }
 
@@ -316,80 +428,54 @@ const MAX_USES = 20; // ค่าเริ่มต้น (ใช้กับช
 const MAX_USES_BY_TYPE = { 'ข้าวไทย': 20, 'ข้าวญี่ปุ่น': 5 };
 function getMaxUses(type){ return MAX_USES_BY_TYPE[type] || MAX_USES; }
 
-function genId(){
-  return 'JB-' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2,5).toUpperCase();
+/* ---------------- Apps Script API helpers ---------------- */
+async function apiGet(action, params){
+  params = params || {};
+  const url = new URL(APPS_SCRIPT_URL);
+  url.searchParams.set('token', APPS_SCRIPT_TOKEN);
+  url.searchParams.set('action', action);
+  url.searchParams.set('_', Date.now() + '-' + Math.random().toString(36).slice(2)); // กันแคช: ทำให้ URL ไม่ซ้ำกันทุกครั้ง
+  Object.keys(params).forEach(k=> url.searchParams.set(k, params[k]));
+  const res = await fetch(url.toString(), { cache: 'no-store' });
+  const data = await res.json();
+  if(data && data.error) throw new Error(data.error);
+  return data;
+}
+async function apiPost(action, payload){
+  payload = payload || {};
+  const res = await fetch(APPS_SCRIPT_URL, {
+    method: 'POST',
+    cache: 'no-store',
+    body: JSON.stringify(Object.assign({ action, token: APPS_SCRIPT_TOKEN }, payload))
+  });
+  const data = await res.json();
+  if(data && data.error) throw new Error(data.error);
+  return data;
 }
 
-/* ---------------- Firestore helpers: jumbo list ---------------- */
+async function fetchAll(){
+  return await apiGet('list'); // { jumbos:[{id,jno,type}], usage:{ id:[entries] } }
+}
 async function fetchJumbosOnce(){
-  const snap = await db.collection('jumbos').get();
-  const list = [];
-  snap.forEach(doc=> list.push(Object.assign({id: doc.id}, doc.data())));
-  // seed on very first run
-  if(list.length===0){
-    const seed = [
-      { id: genId(), jno: 1, type: 'ข้าวไทย' },
-      { id: genId(), jno: 1, type: 'ข้าวญี่ปุ่น' }
-    ];
-    for(const j of seed){
-      await db.collection('jumbos').doc(j.id).set({ jno:j.jno, type:j.type, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
-      await db.collection('usage').doc(j.id).set({ entries: [] });
-    }
-    return seed;
-  }
-  return list;
+  const all = await fetchAll();
+  return all.jumbos;
 }
-
-function subscribeJumbos(cb){
-  return db.collection('jumbos').onSnapshot(snap=>{
-    const list = [];
-    snap.forEach(doc=> list.push(Object.assign({id: doc.id}, doc.data())));
-    cb(list);
-  }, err=>{ console.error(err); toast('การเชื่อมต่อฐานข้อมูลมีปัญหา: ' + err.message); });
-}
-
-function subscribeAllUsageCounts(cb){
-  return db.collection('usage').onSnapshot(snap=>{
-    const map = {};
-    snap.forEach(doc=> map[doc.id] = (doc.data().entries || []));
-    cb(map);
-  }, err=>{ console.error(err); });
-}
-
-function subscribeUsage(jumboId, cb){
-  return db.collection('usage').doc(jumboId).onSnapshot(doc=>{
-    cb(doc.exists ? (doc.data().entries || []) : []);
-  }, err=>{ console.error(err); toast('การเชื่อมต่อฐานข้อมูลมีปัญหา: ' + err.message); });
-}
-
 async function addJumbo(type){
-  const snap = await db.collection('jumbos').where('type','==',type).get();
-  let maxJno = 0;
-  snap.forEach(doc=>{ if(doc.data().jno > maxJno) maxJno = doc.data().jno; });
-  const newJumbo = { id: genId(), jno: maxJno+1, type };
-  await db.collection('jumbos').doc(newJumbo.id).set({ jno:newJumbo.jno, type:newJumbo.type, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
-  await db.collection('usage').doc(newJumbo.id).set({ entries: [] });
-  return newJumbo;
+  return await apiPost('addJumbo', { type }); // { id, jno, type }
 }
-
 async function deleteJumbo(id){
-  await db.collection('jumbos').doc(id).delete();
-  await db.collection('usage').doc(id).delete();
+  return await apiPost('deleteJumbo', { id });
 }
-
 async function loadLog(jumboId){
-  const doc = await db.collection('usage').doc(jumboId).get();
-  return doc.exists ? (doc.data().entries || []) : [];
+  const all = await fetchAll();
+  return all.usage[jumboId] || [];
 }
-
 async function addLogEntry(jumboId, entry, maxUses){
-  const ref = db.collection('usage').doc(jumboId);
-  const doc = await ref.get();
-  const current = doc.exists ? (doc.data().entries || []) : [];
-  if(current.length >= (maxUses || MAX_USES)) return false;
-  current.push(entry);
-  await ref.set({ entries: current });
-  return true;
+  const res = await apiPost('addEntry', { jumboId, entry, maxUses });
+  return !!(res && res.ok);
+}
+async function markDamaged(jumboId, recorder){
+  return await apiPost('markDamaged', { jumboId, recorder });
 }
 
 /* ---------------- Toast ---------------- */
@@ -538,7 +624,8 @@ async function renderList(){
       const pct = Math.min(100, Math.round(used/maxUses*100));
       const qrUrl = await makeQrDataUrl(j.id, 90);
       let statusClass='ok', statusText='ใช้งานปกติ', meterClass='';
-      if(used>=maxUses){ statusClass='full'; statusText='ครบกำหนดการใช้งาน'; meterClass='full'; }
+      if(j.status==='damaged'){ statusClass='full'; statusText='ชำรุด'; meterClass='full'; }
+      else if(used>=maxUses){ statusClass='full'; statusText='ครบกำหนดการใช้งาน'; meterClass='full'; }
       else if(used>=maxUses-3){ statusClass='warn'; statusText='ใกล้ครบกำหนด'; meterClass='warn'; }
 
       const card = document.createElement('div');
@@ -564,17 +651,26 @@ async function renderList(){
     cards.forEach(c=> grid.appendChild(c));
   };
 
-  const unsubJ = subscribeJumbos(list=>{ latestJumbos = list.sort((a,b)=> a.type===b.type ? a.jno-b.jno : a.type.localeCompare(b.type)); redraw(); });
-  const unsubU = subscribeAllUsageCounts(map=>{ latestUsage = map; redraw(); });
-  activeUnsubs.push(unsubJ, unsubU);
+  const refresh = async ()=>{
+    try{
+      const all = await fetchAll();
+      latestJumbos = all.jumbos.sort((a,b)=> a.type===b.type ? a.jno-b.jno : a.type.localeCompare(b.type));
+      latestUsage = all.usage;
+      redraw();
+    }catch(err){ toast('ดึงข้อมูลไม่สำเร็จ: ' + err.message); }
+  };
+  await refresh();
+  const timer = setInterval(refresh, POLL_MS);
+  activeUnsubs.push(()=> clearInterval(timer));
 }
 
 /* ---------------- Detail view (realtime usage log) ---------------- */
 async function renderDetail(jumboId){
   clearListeners();
-  const doc = await db.collection('jumbos').doc(jumboId).get();
-  if(!doc.exists){ toast('ไม่พบจัมโบ้นี้ในระบบ'); goTo('list'); return; }
-  const j = Object.assign({id: doc.id}, doc.data());
+  let all;
+  try{ all = await fetchAll(); }catch(err){ toast('ดึงข้อมูลไม่สำเร็จ: ' + err.message); goTo('list'); return; }
+  const j = all.jumbos.find(x=>x.id===jumboId);
+  if(!j){ toast('ไม่พบจัมโบ้นี้ในระบบ'); goTo('list'); return; }
 
   const panel = document.getElementById('panel');
   document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
@@ -583,6 +679,7 @@ async function renderDetail(jumboId){
   document.getElementById('backBtn').addEventListener('click', ()=>{ currentJumbo=null; goTo('list'); });
 
   const qrUrl = await makeQrDataUrl(j.id, 220);
+  let showFull = false;
 
   const redraw = (log)=>{
     // ผู้ใช้กำลังกรอกฟอร์มบันทึกการใช้งานอยู่ -> ข้ามการวาดหน้าจอทับรอบนี้ ไม่รบกวนการพิมพ์
@@ -591,7 +688,15 @@ async function renderDetail(jumboId){
 
     const used = log.length;
     const maxUses = getMaxUses(j.type);
-    const limitReached = used>=maxUses;
+    const remaining = Math.max(0, maxUses - used);
+    const isDamaged = j.status === 'damaged';
+    const limitReached = used >= maxUses;
+
+    let statusClass='ok', statusText=`เหลือใช้งานได้อีก ${remaining} ครั้ง (ใช้ไปแล้ว ${used}/${maxUses})`;
+    if(isDamaged){ statusClass='bad'; statusText='ชำรุด — ใช้งานไม่ได้แล้ว'; }
+    else if(limitReached){ statusClass='bad'; statusText='ครบกำหนดการใช้งานแล้ว'; }
+    else if(remaining<=3){ statusClass='warn'; }
+
     let rows = '';
     for(let i=0;i<maxUses;i++){
       const e = log[i];
@@ -609,108 +714,111 @@ async function renderDetail(jumboId){
     const body = document.getElementById('detailBody');
     if(!body) return;
     body.innerHTML = `
-      <div class="detail-head">
-        <div class="detail-qr"><img src="${qrUrl}" width="120" height="120" alt="QR ${j.id}"></div>
-        <div class="detail-info">
-          <div class="jno">Jumbo No. ${j.jno} &nbsp;·&nbsp; รหัส ${j.id}</div>
-          <div class="code">${TYPE_ABBR[j.type] || '?'}</div>
-          <div class="name">ชนิดข้าว: ${j.type}</div>
-          <div class="detail-actions">
-            <button class="btn small" id="dlQr">ดาวน์โหลด QR</button>
-            <button class="btn small ghost" id="printLabel">พิมพ์ใบปะหน้า Summary</button>
-            <button class="btn small ghost" id="deleteJumbo" style="border-color:var(--red);color:var(--red);">ลบจัมโบ้นี้</button>
-          </div>
+      <div class="quick-card">
+        <div class="jtitle">Jumbo No. ${j.jno} &nbsp;·&nbsp; ${j.type}</div>
+        <div class="jtype">${TYPE_ABBR[j.type] || '?'}</div>
+        <div class="quick-status ${statusClass}">${statusText}</div>
+        <div class="quick-actions">
+          <button class="quick-btn use" id="btnUse" ${(isDamaged||limitReached)?'disabled':''}>✅ ใช้งาน</button>
+          <button class="quick-btn damaged" id="btnDamaged" ${isDamaged?'disabled':''}>⚠️ ชำรุด</button>
         </div>
+        <button class="toggle-details" id="toggleDetails">${showFull ? 'ซ่อนรายละเอียด ▴' : 'ดูรายละเอียด/ประวัติทั้งหมด ▾'}</button>
       </div>
 
-      <table class="ledger">
-        <thead><tr>
-          <th style="width:30px">ครั้งที่</th>
-          <th>วันที่ใช้งาน</th>
-          <th>ความสะอาด</th>
-          <th>ความสมบูรณ์<br>ของจัมโบ้</th>
-          <th>ผู้บันทึก</th>
-          <th>ผู้ตรวจสอบ</th>
-          <th>หมายเหตุ</th>
-        </tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-
-      <div class="form-box">
-        <h3 style="font-size:15px;margin-bottom:12px;">บันทึกการใช้งานครั้งที่ ${used+1}</h3>
-        ${limitReached ? `<div class="limit-note">จัมโบ้นี้ใช้งานครบ ${maxUses} ครั้งแล้ว กรุณาเปลี่ยนจัมโบ้ใหม่ ไม่สามารถบันทึกเพิ่มได้</div>` : `
-        <form id="entryForm">
-          <div class="form-grid">
-            <div>
-              <label>วันที่ใช้งาน</label>
-              <input type="date" id="f_date" required>
-            </div>
-            <div>
-              <label>ผู้บันทึก</label>
-              <input type="text" id="f_recorder" placeholder="ชื่อผู้บันทึก" required>
-            </div>
-            <div>
-              <label>ผู้ตรวจสอบ</label>
-              <input type="text" id="f_inspector" placeholder="ชื่อผู้ตรวจสอบ" required>
-            </div>
-            <div>
-              <label>หมายเหตุ</label>
-              <input type="text" id="f_note" placeholder="ไม่บังคับ">
-            </div>
-            <div class="full" style="display:flex;gap:24px;">
-              <div class="check-row"><input type="checkbox" id="f_clean" checked><label style="margin:0;">ความสะอาด (ไม่มีราขึ้น/กลิ่นอับ/เชื้อรา/สิ่งปลอมปน)</label></div>
-            </div>
-            <div class="full" style="display:flex;gap:24px;">
-              <div class="check-row"><input type="checkbox" id="f_complete" checked><label style="margin:0;">ความสมบูรณ์ของจัมโบ้ (ไม่มีรอยฉีกขาด/ซ่อมแนวหลุด/เป็นแตก)</label></div>
+      <div id="fullDetails" style="display:${showFull?'block':'none'};margin-top:18px;">
+        <div class="detail-head">
+          <div class="detail-qr"><img src="${qrUrl}" width="120" height="120" alt="QR ${j.id}"></div>
+          <div class="detail-info">
+            <div class="jno">Jumbo No. ${j.jno} &nbsp;·&nbsp; รหัส ${j.id}</div>
+            <div class="code">${TYPE_ABBR[j.type] || '?'}</div>
+            <div class="name">ชนิดข้าว: ${j.type}</div>
+            <div class="detail-actions">
+              <button class="btn small" id="dlQr">ดาวน์โหลด QR</button>
+              <button class="btn small ghost" id="printLabel">พิมพ์ใบปะหน้า Summary</button>
+              <button class="btn small ghost" id="deleteJumbo" style="border-color:var(--red);color:var(--red);">ลบจัมโบ้นี้</button>
             </div>
           </div>
-          <button type="submit" class="btn" style="margin-top:6px;">บันทึกการใช้งาน</button>
-        </form>`}
+        </div>
+
+        <table class="ledger">
+          <thead><tr>
+            <th style="width:30px">ครั้งที่</th>
+            <th>วันที่ใช้งาน</th>
+            <th>ความสะอาด</th>
+            <th>ความสมบูรณ์<br>ของจัมโบ้</th>
+            <th>ผู้บันทึก</th>
+            <th>ผู้ตรวจสอบ</th>
+            <th>หมายเหตุ</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
       </div>
     `;
 
-    document.getElementById('f_date') && (document.getElementById('f_date').valueAsDate = new Date());
-
-    document.getElementById('dlQr').addEventListener('click', ()=>{
-      const a = document.createElement('a');
-      a.href = qrUrl; a.download = `QR-${j.id}.png`; a.click();
-    });
-    document.getElementById('printLabel').addEventListener('click', ()=> printLabel(j, log, qrUrl));
-    document.getElementById('deleteJumbo').addEventListener('click', async ()=>{
-      const ok = confirm(`ยืนยันลบ Jumbo No.${j.jno} (${j.type}) ออกจากระบบ? ประวัติการใช้งานทั้งหมดของจัมโบ้นี้จะถูกลบด้วย`);
-      if(!ok) return;
+    document.getElementById('btnUse').addEventListener('click', async ()=>{
+      document.getElementById('btnUse').disabled = true;
+      document.getElementById('btnDamaged').disabled = true;
+      const entry = {
+        date: new Date().toISOString().slice(0,10),
+        clean: true,
+        complete: true,
+        recorder: currentUser ? currentUser.name : '',
+        inspector: '',
+        note: '',
+        ts: Date.now()
+      };
       try{
-        await deleteJumbo(j.id);
-        toast(`ลบ Jumbo No.${j.jno} เรียบร้อย`);
-        currentJumbo = null;
-        goTo('list');
-      }catch(err){ toast('ลบไม่สำเร็จ: ' + err.message); }
+        const ok2 = await addLogEntry(j.id, entry, getMaxUses(j.type));
+        if(!ok2){ toast('จัมโบ้นี้ครบกำหนดการใช้งานแล้ว หรือถูกตีเป็นชำรุดไปแล้ว'); return; }
+        toast(`บันทึกการใช้งานเรียบร้อย — กลับไปสแกนใบถัดไป`);
+        setTimeout(()=>{ currentJumbo=null; goTo('scan'); }, 900);
+      }catch(err){ toast('บันทึกไม่สำเร็จ: ' + err.message); }
     });
 
-    const form = document.getElementById('entryForm');
-    if(form){
-      form.addEventListener('submit', async ev=>{
-        ev.preventDefault();
-        const entry = {
-          date: document.getElementById('f_date').value,
-          clean: document.getElementById('f_clean').checked,
-          complete: document.getElementById('f_complete').checked,
-          recorder: document.getElementById('f_recorder').value.trim(),
-          inspector: document.getElementById('f_inspector').value.trim(),
-          note: document.getElementById('f_note').value.trim(),
-          ts: Date.now()
-        };
+    document.getElementById('btnDamaged').addEventListener('click', async ()=>{
+      const ok = confirm(`ยืนยันตีเป็นชำรุด Jumbo No.${j.jno} (${j.type})? จัมโบ้ใบนี้จะใช้งานต่อไม่ได้อีก`);
+      if(!ok) return;
+      document.getElementById('btnUse').disabled = true;
+      document.getElementById('btnDamaged').disabled = true;
+      try{
+        await markDamaged(j.id, currentUser ? currentUser.name : '');
+        toast(`ตี Jumbo No.${j.jno} เป็นชำรุดเรียบร้อย — กลับไปสแกนใบถัดไป`);
+        setTimeout(()=>{ currentJumbo=null; goTo('scan'); }, 900);
+      }catch(err){ toast('บันทึกไม่สำเร็จ: ' + err.message); }
+    });
+
+    document.getElementById('toggleDetails').addEventListener('click', ()=>{
+      showFull = !showFull;
+      redraw(log);
+    });
+
+    if(showFull){
+      document.getElementById('dlQr').addEventListener('click', ()=>{
+        const a = document.createElement('a');
+        a.href = qrUrl; a.download = `QR-${j.id}.png`; a.click();
+      });
+      document.getElementById('printLabel').addEventListener('click', ()=> printLabel(j, log, qrUrl));
+      document.getElementById('deleteJumbo').addEventListener('click', async ()=>{
+        const ok = confirm(`ยืนยันลบ Jumbo No.${j.jno} (${j.type}) ออกจากระบบ? ประวัติการใช้งานทั้งหมดของจัมโบ้นี้จะถูกลบด้วย`);
+        if(!ok) return;
         try{
-          const ok2 = await addLogEntry(j.id, entry, getMaxUses(j.type));
-          if(!ok2){ toast('จัมโบ้นี้ครบกำหนดการใช้งานแล้ว'); return; }
-          toast('บันทึกการใช้งานเรียบร้อย');
-        }catch(err){ toast('บันทึกไม่สำเร็จ: ' + err.message); }
+          await deleteJumbo(j.id);
+          toast(`ลบ Jumbo No.${j.jno} เรียบร้อย`);
+          currentJumbo = null;
+          goTo('list');
+        }catch(err){ toast('ลบไม่สำเร็จ: ' + err.message); }
       });
     }
   };
 
-  const unsub = subscribeUsage(jumboId, redraw);
-  activeUnsubs.push(unsub);
+  redraw(all.usage[jumboId] || []);
+  const timer = setInterval(async ()=>{
+    try{
+      const fresh = await fetchAll();
+      redraw(fresh.usage[jumboId] || []);
+    }catch(err){ /* silent on background poll error */ }
+  }, POLL_MS);
+  activeUnsubs.push(()=> clearInterval(timer));
 }
 
 /* ---------------- Print label ---------------- */
@@ -867,9 +975,11 @@ async function renderExport(){
       <table class="summary-table" id="summaryPreview"><tr><td>กำลังโหลดข้อมูล...</td></tr></table>
     </div>
   `;
-  const jumbos = await fetchJumbosOnce();
-  const logs = {};
-  for(const j of jumbos){ logs[j.id] = await loadLog(j.id); }
+  let jumbos = [], logs = {};
+  try{
+    const all = await fetchAll();
+    jumbos = all.jumbos; logs = all.usage;
+  }catch(err){ toast('ดึงข้อมูลไม่สำเร็จ: ' + err.message); }
 
   document.getElementById('exportIntro').innerHTML =
     `ส่งออกข้อมูลการใช้งานของจัมโบ้ทั้งหมด ${jumbos.length} รายการ เป็นไฟล์ Excel (.xlsx) ประกอบด้วย 2 ชีต:
@@ -880,7 +990,7 @@ async function renderExport(){
     jumbos.map(j=>{
       const used = (logs[j.id]||[]).length;
       const maxUses = getMaxUses(j.type);
-      const status = used>=maxUses ? 'ครบกำหนด' : (used>=maxUses-3 ? 'ใกล้ครบกำหนด' : 'ปกติ');
+      const status = j.status==='damaged' ? 'ชำรุด' : (used>=maxUses ? 'ครบกำหนด' : (used>=maxUses-3 ? 'ใกล้ครบกำหนด' : 'ปกติ'));
       return `<tr><td>${j.jno}</td><td>${j.type}</td><td>${used}/${maxUses}</td><td>${status}</td></tr>`;
     }).join('');
 
@@ -891,7 +1001,7 @@ function exportExcel(jumbos, logs){
   const summaryRows = jumbos.map(j=>{
     const used = (logs[j.id]||[]).length;
     const maxUses = getMaxUses(j.type);
-    const status = used>=maxUses ? 'ครบกำหนดการใช้งาน' : (used>=maxUses-3 ? 'ใกล้ครบกำหนด' : 'ใช้งานปกติ');
+    const status = j.status==='damaged' ? 'ชำรุด' : (used>=maxUses ? 'ครบกำหนดการใช้งาน' : (used>=maxUses-3 ? 'ใกล้ครบกำหนด' : 'ใช้งานปกติ'));
     return {
       'Jumbo No.': j.jno,
       'รหัสจัมโบ้': j.id,
