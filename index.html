@@ -271,8 +271,8 @@
    ตั้งค่าการเชื่อมต่อ Google Sheet (แก้ 2 ค่าด้านล่างนี้)
    วิธีขอค่านี้: ดูขั้นตอนในคู่มือการใช้งานที่แนบมาพร้อมไฟล์นี้
    ================================================================== */
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyaYW5tFThoKBmIVLt6ZHE8VHZHZfIV-7a06foLKcGn8GjDtov5Yi5NfMVQKj6KdPQ9/exec";
-const APPS_SCRIPT_TOKEN = "1234";
+const APPS_SCRIPT_URL = "PASTE_YOUR_WEB_APP_URL_HERE";
+const APPS_SCRIPT_TOKEN = "PASTE_YOUR_SECRET_TOKEN_HERE";
 
 /* ==================================================================
    ตั้งค่า Google Sign-In (ไม่บังคับ) — ใส่ Client ID เพื่อให้ผู้ใช้ล็อกอินด้วย
@@ -898,6 +898,23 @@ async function renderScan(){
     const val = document.getElementById('manualSelect').value;
     if(val){ currentJumbo=val; renderDetail(val); }
   });
+
+  // รีเฟรชรายชื่อจัมโบ้เป็นระยะระหว่างอยู่หน้าสแกน เผื่อเพิ่งเพิ่มจัมโบ้ใหม่/พิมพ์ QR ใหม่มาสแกนทันที
+  const refreshTimer = setInterval(async ()=>{
+    try{
+      const fresh = await fetchJumbosOnce();
+      jumbosCache = fresh;
+      const sel = document.getElementById('manualSelect');
+      if(sel){
+        const keep = sel.value;
+        sel.innerHTML = '<option value="">— เลือกจัมโบ้ —</option>' +
+          fresh.map(j=>`<option value="${j.id}">Jumbo No.${j.jno} — ${j.type}</option>`).join('');
+        sel.value = keep;
+      }
+    }catch(e){ /* silent */ }
+  }, POLL_MS);
+  activeUnsubs.push(()=> clearInterval(refreshTimer));
+
   startScanner();
 }
 
@@ -924,6 +941,9 @@ async function startScanner(){
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     const MAX_SIDE = 640; // ลดขนาดเฟรมก่อนสแกน ให้ jsQR ประมวลผลเร็วขึ้นมาก แทนที่จะใช้ความละเอียดกล้องเต็มๆ ซึ่งทำให้อืดและจับ QR ไม่ทัน
+    let lastMismatch = 0;
+    let noSignalWarned = false;
+    const scanStartedAt = Date.now();
 
     const tick = ()=>{
       if(!scanStream) return; // ถูกหยุดสแกนไปแล้ว
@@ -935,7 +955,8 @@ async function startScanner(){
         const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'attemptBoth' });
         if(code && code.data){
-          const found = jumbosCache.find(j=>j.id===code.data.trim());
+          const scanned = code.data.trim();
+          const found = jumbosCache.find(j=>j.id===scanned);
           if(found){
             stopScanner();
             toast(`พบ Jumbo No.${found.jno} — ${found.type}`);
@@ -943,7 +964,17 @@ async function startScanner(){
             renderDetail(found.id);
             return;
           }
-          // สแกนได้ QR แต่ข้อมูลไม่ตรงกับจัมโบ้ใดในระบบ (อาจเป็น QR อื่น) — สแกนต่อไปเรื่อยๆ ไม่ต้องหยุด
+          // สแกนได้ QR แต่ข้อมูลไม่ตรงกับจัมโบ้ใดในระบบตอนนี้ — แจ้งให้เห็นชัดๆ แทนการเงียบไปเฉยๆ
+          // (สาเหตุที่พบบ่อย: เป็น QR เก่าที่พิมพ์ไว้ก่อนเปลี่ยนระบบหลังบ้าน หรือจัมโบ้ถูกลบไปแล้ว)
+          const now = Date.now();
+          if(now - lastMismatch > 1500){
+            lastMismatch = now;
+            msg.innerHTML = `พบ QR แล้ว แต่รหัส <b>"${scanned}"</b> ไม่ตรงกับจัมโบ้ใดในระบบตอนนี้ — อาจเป็น QR เก่าจากระบบก่อนหน้า หรือจัมโบ้ถูกลบไปแล้ว<br><span style="color:var(--ink-soft);font-weight:400;">กำลังสแกนต่อ... ลองเล็งไปที่ QR ใบอื่น หรือเลือกจัมโบ้ด้วยตนเองด้านล่าง</span>`;
+          }
+        } else if(!noSignalWarned && Date.now() - scanStartedAt > 6000){
+          // ผ่านไป 6 วิ ยังไม่เคยอ่านอะไรได้เลยแม้แต่ครั้งเดียว — น่าจะเป็นปัญหากล้องเอง ไม่ใช่ข้อมูลไม่ตรง
+          noSignalWarned = true;
+          msg.innerHTML = `ยังไม่พบ QR เลยในกล้อง — ลองเช็ค: แสงสว่างเพียงพอไหม / ป้าย QR เปื้อน-ยับ-เอียงไหม / ระยะห่างเหมาะสมไหม (ไม่ใกล้-ไกลเกินไป) หรือลองสลับกล้องหน้า-หลังโดยออกจากหน้านี้แล้วเข้าใหม่`;
         }
       }
       scanRAF = requestAnimationFrame(tick);
